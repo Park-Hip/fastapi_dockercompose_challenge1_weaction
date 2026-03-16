@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: summarizer-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aiuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-supersecret}
+      POSTGRES_DB: ${POSTGRES_DB:-summarizerdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: summarizer-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Inject DB credentials avoiding hardcoding secrets in code (Law #3)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-aiuser}:${POSTGRES_PASSWORD:-supersecret}@db:5432/${POSTGRES_DB:-summarizerdb}
+      - OLLAMA_API_URL=http://host.docker.internal:11434/api/generate
+      - OLLAMA_MODEL=qwen2.5:1.5b
+    depends_on:
+      db:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
